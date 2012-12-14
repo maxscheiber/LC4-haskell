@@ -8,14 +8,16 @@ module Parser.Base where
 
 import Parser.Parser
 import Data.Char
+import Numeric (readHex)
     
 -- | Parsers for specific sorts of characters.
-alpha, digit, upper, lower, space :: Parser String Char
-alpha = satisfy isAlpha
-digit = satisfy isDigit            
-upper = satisfy isUpper
-lower = satisfy isLower
-space = satisfy isSpace
+alpha, digit, upper, lower, space, hexDigit :: Parser String Char
+alpha    = satisfy isAlpha
+digit    = satisfy isDigit  
+hexDigit = satisfy (\c -> (isDigit c || (c >= 'A' && c <= 'F')))
+upper    = satisfy isUpper
+lower    = satisfy isLower
+space    = satisfy isSpace
    
 -- | Parses and returns the inputted a.
 char :: Eq a => a -> Parser [a] a
@@ -25,11 +27,25 @@ char c = satisfy (c ==)
 string :: Eq a => [a] -> Parser [a] [a]
 string = mapM char
 
--- | Parsers an integer.
 int :: Parser String Int
-int = do n <- string "-" <|> return []
-         s <- rest digit  
-         return $ (read (n ++ s) :: Int)
+int = dec <|> hex
+
+-- | Parsers a decimal integer.
+dec :: Parser String Int
+dec = do 
+  string "#" <|> string ""
+  n <- string "-" <|> return []
+  s <- rest digit  
+  return $ (read (n ++ s) :: Int)
+
+-- | Parses a hexadeicmal integer.
+hex :: Parser String Int
+hex = do
+  char 'x'
+  s <- rest hexDigit
+  case (readHex s) of
+    [(h, _)] -> return h
+    _        -> fail "Could not parse hex"
 
 -- | Parses zero or more instances of p.
 many   :: Parser t a -> Parser t [a]

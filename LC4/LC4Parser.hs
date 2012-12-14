@@ -1,9 +1,8 @@
 {-# OPTIONS -Wall -fwarn-tabs -fno-warn-type-defaults -fno-warn-unused-do-bind  #-}
 
 -- | Author: Max Scheiber, University of Pennsylvania '15, maxnscheiber@gmail.com
--- | Version: 0.1
+-- | Version: 0.2
 -- | Specific parsers designed to parse LC4 .asm files
--- | KNOWN ISSUES: Does not correctly distinguish between hex / dec / binary.
 
 module LC4.LC4Parser 
   (
@@ -21,12 +20,26 @@ regP = unlist $ map (\r -> string (show r) >> return r) [R0, R1, R2, R3, R4, R5,
 
 -- | Parse a label as a string
 labelP :: Parser String String
-labelP = ws . many $ satisfy (not . isSpace)
+labelP = ws . rest $ satisfy (not . isSpace)
 
 -- | Convert an Instruction or Directive into a Line
 lineP :: Parser String Line
-lineP = (instrP >>= \i -> return (Instr i)) <|>
-        (directiveP >>= \d -> return (Dir d))
+lineP = (instrP >>= \i -> return (Instr i))   <|>
+        (directiveP >>= \d -> return (Dir d)) <|>
+        commentP                              <|>
+        labelIP
+
+-- | Parse a Comment
+commentP :: Parser String Line
+commentP = do
+  ws $ char ';'
+  cmnt <- ws $ many . satisfy $ not . (== '\n')
+  return $ Comment cmnt
+
+labelIP :: Parser String Line
+labelIP = do
+  lbl <- ws $ rest . satisfy $ not . (== '\n')
+  return $ Label lbl
 
 -- | Parse an Instruction from one of its constructors
 instrP :: Parser String Instruction
@@ -35,8 +48,8 @@ instrP = unlist . concat $
    [retP], 
    map loneP [NOP, RTI],
    map oneStrP [BRn, BRnz, BRnp, BRz, BRzp, BRp, BRnzp, JSR, JMP],
-   map oneValP [BRn, BRnz, BRnp, BRz, BRzp, BRp, BRnzp, JSR, JMP],
-   map oneRegP [JSRR, JMPR, TRAP],
+   map oneValP [BRn, BRnz, BRnp, BRz, BRzp, BRp, BRnzp, JSR, JMP, TRAP],
+   map oneRegP [JSRR, JMPR],
    map oneRegOneStrP [LEA, LC],
    map oneRegOneValP [CMPI, CMPIU, CONST, HICONST],
    map twoRegP [CMP, CMPU, NOT], 
@@ -134,9 +147,41 @@ directiveP = unlist [dataP, codeP, addrP, falignP, fillP, blkwP, dconstP,
 dataP, codeP, addrP, falignP, fillP, blkwP, dconstP, uconstP :: Parser String Directive
 dataP   = ws $ string ".DATA"   >> return DATA
 codeP   = ws $ string ".CODE"   >> return CODE
-addrP   = ws $ string ".ADDR"   >> (ws $ int >>= \i -> return (ADDR $ UIMM16 i))
 falignP = ws $ string ".FALIGN" >> return FALIGN
+addrP   = do
+  s <- ws $ labelP
+  ws . string $ ".ADDR"
+  i <- ws int
+  return $ ADDR s (IMM16 i)
+fillP = do
+  s <- ws $ labelP
+  ws . string $ ".FILL"
+  i <- ws int
+  return $ FILL s (IMM16 i)
+blkwP = do
+  s <- ws $ labelP
+  ws . string $ ".BLKW"
+  i <- ws int
+  return $ BLKW s (UIMM16 i)
+dconstP = do
+  s <- ws labelP
+  ws . string $ ".CONST"
+  i <- ws int
+  return $ DCONST s (IMM16 i)
+uconstP = do
+  s <- ws $ labelP
+  ws . string $ ".UCONST"
+  i <- ws int
+  return $ UCONST s (UIMM16 i)
+
+{- addrP   = ws $ string ".ADDR"   >> (ws $ int >>= \i -> return (ADDR $ UIMM16 i))
 fillP   = ws $ string ".FILL"   >> (ws $ int >>= \i -> return (FILL $ IMM16 i))
 blkwP   = ws $ string ".BLKW"   >> (ws $ int >>= \i -> return (BLKW $ UIMM16 i))
 dconstP = ws $ string ".CONST"  >> (ws $ int >>= \i -> return (DCONST $ IMM16 i))
 uconstP = ws $ string ".UCONST" >> (ws $ int >>= \i -> return (UCONST $ UIMM16 i))
+
+directP op = do
+  s <- ws $ labelP
+  string $ '.' : show op
+  i <- ws int
+  return $ op s (IMM16 i) -}

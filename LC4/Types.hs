@@ -30,14 +30,14 @@ data Value =
   deriving (Show, Eq)
 
 data Directive = 
-  DATA |
-  CODE |
-  ADDR Value |
-  FALIGN |
-  FILL Value |
-  BLKW Value |
-  DCONST Value |
-  UCONST Value
+  DATA                |
+  CODE                |
+  ADDR String Value   |
+  FALIGN              |
+  FILL String Value   |
+  BLKW String Value   |
+  DCONST String Value |
+  UCONST String Value
   deriving (Show, Eq)
 
 data Operator = 
@@ -94,7 +94,7 @@ data Instruction =
   deriving (Show, Eq)
 
 data Line =
-  Dir Directive | Instr Instruction
+  Dir Directive | Instr Instruction | Comment String | Label String
   deriving (Show, Eq)
 
 data Machine = Machine { pc :: Int
