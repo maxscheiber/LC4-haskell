@@ -132,11 +132,11 @@ directiveP = unlist [dataP, codeP, addrP, falignP, fillP, blkwP, dconstP,
 
 -- | Individual parsers for assembly directives.
 dataP, codeP, addrP, falignP, fillP, blkwP, dconstP, uconstP :: Parser String Directive
-dataP   = ws $ string ".DATA" >> return DATA
-codeP   = ws $ string ".CODE" >> return CODE
-addrP   = ws $ string ".ADDR" >> (ws $ int >>= \i -> return (ADDR $ UIMM16 i))
+dataP   = ws $ string ".DATA"   >> return DATA
+codeP   = ws $ string ".CODE"   >> return CODE
+addrP   = ws $ string ".ADDR"   >> (ws $ int >>= \i -> return (ADDR $ UIMM16 i))
 falignP = ws $ string ".FALIGN" >> return FALIGN
-fillP   = ws $ string ".FILL" >> (ws $ int >>= \i -> return (FILL $ IMM16 i))
-blkwP   = ws $ string ".BLKW" >> (ws $ int >>= \i -> return (BLKW $ UIMM16 i))
-dconstP = ws $ string ".CONST" >> (ws $ int >>= \i -> return (DCONST $ IMM16 i))
+fillP   = ws $ string ".FILL"   >> (ws $ int >>= \i -> return (FILL $ IMM16 i))
+blkwP   = ws $ string ".BLKW"   >> (ws $ int >>= \i -> return (BLKW $ UIMM16 i))
+dconstP = ws $ string ".CONST"  >> (ws $ int >>= \i -> return (DCONST $ IMM16 i))
 uconstP = ws $ string ".UCONST" >> (ws $ int >>= \i -> return (UCONST $ UIMM16 i))
