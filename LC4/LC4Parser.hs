@@ -3,6 +3,7 @@
 -- | Author: Max Scheiber, University of Pennsylvania '15, maxnscheiber@gmail.com
 -- | Version: 0.1
 -- | Specific parsers designed to parse LC4 .asm files
+-- | KNOWN ISSUES: Does not correctly distinguish between hex / dec / binary.
 
 module LC4.LC4Parser 
   (
