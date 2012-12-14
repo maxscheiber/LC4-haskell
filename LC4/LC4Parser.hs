@@ -32,8 +32,8 @@ lineP = (instrP >>= \i -> return (Instr i)) <|>
 instrP :: Parser String Instruction
 instrP = unlist . concat $ 
   [
-   map loneP [NOP, RTI],
    [retP], 
+   map loneP [NOP, RTI],
    map oneStrP [BRn, BRnz, BRnp, BRz, BRzp, BRp, BRnzp, JSR, JMP],
    map oneValP [BRn, BRnz, BRnp, BRz, BRzp, BRp, BRnzp, JSR, JMP],
    map oneRegP [JSRR, JMPR, TRAP],
@@ -44,7 +44,11 @@ instrP = unlist . concat $
    map threeRegP [ADD, MUL, SUB, DIV, MOD, AND, OR, XOR]
   ]
 
--- | Parses an Operator with no arguments, like NOP or RTI
+-- | Turns the RET pseudoinstruction into JMPR R7.
+retP :: Parser String Instruction
+retP = ws $ string "RET" >> (return $ OneReg JMPR R7)
+
+-- | Parses an Operator with no arguments, like NOP or RTI.
 loneP :: Operator -> Parser String Instruction
 loneP op = ws (string $ show op) >> return (Lone op)
 
@@ -121,12 +125,6 @@ threeRegP op = do
   rt <- ws regP
   return $ ThreeReg op rd rs rt
 
--- | Turns the RET pseudoinstruction into JMPR R7.
-retP :: Parser String Instruction
-retP = do
-  ws $ string "RET"
-  return $ OneReg JMPR R7
-
 -- | Combines all assembly directive parsers.
 directiveP :: Parser String Directive
 directiveP = unlist [dataP, codeP, addrP, falignP, fillP, blkwP, dconstP, 
@@ -134,11 +132,11 @@ directiveP = unlist [dataP, codeP, addrP, falignP, fillP, blkwP, dconstP,
 
 -- | Individual parsers for assembly directives.
 dataP, codeP, addrP, falignP, fillP, blkwP, dconstP, uconstP :: Parser String Directive
-dataP = ws $ string ".DATA" >> return DATA
-codeP = ws $ string ".CODE" >> return CODE
-addrP = ws $ string ".ADDR" >> (ws $ int >>= \i -> return (ADDR $ UIMM16 i))
+dataP   = ws $ string ".DATA" >> return DATA
+codeP   = ws $ string ".CODE" >> return CODE
+addrP   = ws $ string ".ADDR" >> (ws $ int >>= \i -> return (ADDR $ UIMM16 i))
 falignP = ws $ string ".FALIGN" >> return FALIGN
-fillP = ws $ string ".FILL" >> (ws $ int >>= \i -> return (FILL $ IMM16 i))
-blkwP = ws $ string ".BLKW" >> (ws $ int >>= \i -> return (BLKW $ UIMM16 i))
+fillP   = ws $ string ".FILL" >> (ws $ int >>= \i -> return (FILL $ IMM16 i))
+blkwP   = ws $ string ".BLKW" >> (ws $ int >>= \i -> return (BLKW $ UIMM16 i))
 dconstP = ws $ string ".CONST" >> (ws $ int >>= \i -> return (DCONST $ IMM16 i))
 uconstP = ws $ string ".UCONST" >> (ws $ int >>= \i -> return (UCONST $ UIMM16 i))
