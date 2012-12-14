@@ -50,7 +50,6 @@ data Operator =
   BRzp    |
   BRp     |
   ADD     |
-  ADDIM   |
   MUL     |
   SUB     |
   DIV     |
@@ -66,7 +65,6 @@ data Operator =
   RTI     |
   TRAP    |
   AND     |
-  ANDIM   |
   NOT     |
   OR      |
   XOR     |

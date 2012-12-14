@@ -21,9 +21,11 @@ m = Machine { pc = 0
             , labels = empty :: Map String Int
             }
 
+-- | The standard parser for LC4 .asm files.
 asmParser :: Parser String [Line]
 asmParser = many lineP
 
+-- | Properly parse a .asm file and maybe return an error.
 parseASM :: Parser String [Line] -> String -> Either String [Line]
 parseASM p str = case parse p str of
   []       -> Left "No possible parse"
@@ -35,6 +37,7 @@ parseASM p str = case parse p str of
     uncomment (Comment _) = False
     uncomment _           = True
 
+-- | Read in the .asm file itself and parse it.
 readASM :: Parser String [Line] -> String -> IO (Either String [Line])
 readASM p name = do
   f <- openFile name ReadMode

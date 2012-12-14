@@ -47,19 +47,20 @@ instrP = unlist . concat $
   [
    [retP], 
    map loneP [NOP, RTI],
-   map oneStrP [BRn, BRnz, BRnp, BRz, BRzp, BRp, BRnzp, JSR, JMP],
-   map oneValP [BRn, BRnz, BRnp, BRz, BRzp, BRp, BRnzp, JSR, JMP, TRAP],
+   map oneStrP [BRnzp, BRnz, BRnp, BRn, BRzp, BRz, BRp, JSR, JMP],
+   map oneValP [BRnzp, BRnz, BRnp, BRn, BRzp, BRz, BRp, JSR, JMP, TRAP],
    map oneRegP [JSRR, JMPR],
    map oneRegOneStrP [LEA, LC],
    map oneRegOneValP [CMPI, CMPIU, CONST, HICONST],
    map twoRegP [CMP, CMPU, NOT], 
-   map twoRegOneValP [ADDIM, ANDIM, LDR, STR, SLL, SRA, SRL],
+   map twoRegOneValP [ADD, AND, LDR, STR, SLL, SRA, SRL],
    map threeRegP [ADD, MUL, SUB, DIV, MOD, AND, OR, XOR]
   ]
 
--- | Turns the RET pseudoinstruction into JMPR R7.
+-- | Turns the RET pseudoinstruction into JMPR R7. Parses space to differentiate
+-- | between a label RETURN and an instruction RET.
 retP :: Parser String Instruction
-retP = ws $ string "RET" >> (return $ OneReg JMPR R7)
+retP = ws $ string "RET" >> space >> (return $ OneReg JMPR R7)
 
 -- | Parses an Operator with no arguments, like NOP or RTI.
 loneP :: Operator -> Parser String Instruction
