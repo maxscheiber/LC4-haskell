@@ -47,9 +47,9 @@ instrP = unlist . concat $
   [
    [retP], 
    map loneP [NOP, RTI],
+   map oneRegP [JSRR, JMPR],
    map oneStrP [BRnzp, BRnz, BRnp, BRn, BRzp, BRz, BRp, JSR, JMP],
    map oneValP [BRnzp, BRnz, BRnp, BRn, BRzp, BRz, BRp, JSR, JMP, TRAP],
-   map oneRegP [JSRR, JMPR],
    map oneRegOneStrP [LEA, LC],
    map oneRegOneValP [CMPI, CMPIU, CONST, HICONST],
    map twoRegP [CMP, CMPU, NOT], 
@@ -94,7 +94,7 @@ oneRegOneStrP :: Operator -> Parser String Instruction
 oneRegOneStrP op = do
   ws . string $ show op
   reg <- ws regP
-  ws $ char ','
+  (ws $ string ",") <|> (ws $ string "")
   s <- ws labelP
   return $ OneRegOneStr op reg s
 
@@ -104,7 +104,7 @@ oneRegOneValP :: Operator -> Parser String Instruction
 oneRegOneValP op = do
   ws . string $ show op
   reg <- ws regP
-  ws $ char ','
+  (ws $ string ",") <|> (ws $ string "")
   val <- ws int
   return $ OneRegOneVal op reg (IMM16 val)
 
@@ -113,7 +113,7 @@ twoRegP :: Operator -> Parser String Instruction
 twoRegP op = do
   ws . string $ show op
   rd <- ws regP
-  ws $ char ','
+  (ws $ string ",") <|> (ws $ string "")
   rs <- ws regP
   return $ TwoReg op rd rs
 
@@ -122,9 +122,9 @@ twoRegOneValP :: Operator -> Parser String Instruction
 twoRegOneValP op = do
   ws . string $ show op
   rd <- ws regP
-  ws $ char ','
+  (ws $ string ",") <|> (ws $ string "")
   rs <- ws regP
-  ws $ char ','
+  (ws $ string ",") <|> (ws $ string "")
   val <- ws int
   return $ TwoRegOneVal op rd rs (IMM16 val)
 
@@ -133,9 +133,9 @@ threeRegP :: Operator -> Parser String Instruction
 threeRegP op = do
   ws . string $ show op
   rd <- ws regP
-  ws $ char ','
+  (ws $ string ",") <|> (ws $ string "")
   rs <- ws regP
-  ws $ char ','
+  (ws $ string ",") <|> (ws $ string "")
   rt <- ws regP
   return $ ThreeReg op rd rs rt
 
@@ -149,21 +149,18 @@ dataP, codeP, addrP, falignP, fillP, blkwP, dconstP, uconstP :: Parser String Di
 dataP   = ws $ string ".DATA"   >> return DATA
 codeP   = ws $ string ".CODE"   >> return CODE
 falignP = ws $ string ".FALIGN" >> return FALIGN
-addrP   = do
-  s <- ws $ labelP
+addrP   = do 
   ws . string $ ".ADDR"
   i <- ws int
-  return $ ADDR s (IMM16 i)
+  return $ ADDR (UIMM16 i)
 fillP = do
-  s <- ws $ labelP
   ws . string $ ".FILL"
   i <- ws int
-  return $ FILL s (IMM16 i)
+  return $ FILL (IMM16 i)
 blkwP = do
-  s <- ws $ labelP
   ws . string $ ".BLKW"
   i <- ws int
-  return $ BLKW s (UIMM16 i)
+  return $ BLKW (UIMM16 i)
 dconstP = do
   s <- ws labelP
   ws . string $ ".CONST"

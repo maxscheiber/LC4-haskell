@@ -4,7 +4,7 @@ module LC4.Types where
 import Prelude
 import Data.Bits()
 import Data.Map
---import Data.Array.ST
+import Data.IntMap
 
 data Reg =
   R0 |
@@ -32,10 +32,10 @@ data Value =
 data Directive = 
   DATA                |
   CODE                |
-  ADDR String Value   |
+  ADDR Value          |
   FALIGN              |
-  FILL String Value   |
-  BLKW String Value   |
+  FILL Value          |
+  BLKW Value          |
   DCONST String Value |
   UCONST String Value
   deriving (Show, Eq)
@@ -76,7 +76,8 @@ data Operator =
   SRA     |
   SRL     |
   LEA     |
-  LC      
+  LC      |
+  BINARY 
   deriving (Show, Eq)
 
 data Instruction =
@@ -98,6 +99,6 @@ data Line =
 data Machine = Machine { pc :: Int
                        , psr :: Int
                        , regs :: Map Reg Int
-                       --, memory :: STArray Int Instruction
+                       , memory :: IntMap Instruction
                        , labels :: Map String Int
-                       }
+                       } deriving (Show, Eq)

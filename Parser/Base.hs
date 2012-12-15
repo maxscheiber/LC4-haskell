@@ -28,7 +28,7 @@ string :: Eq a => [a] -> Parser [a] [a]
 string = mapM char
 
 int :: Parser String Int
-int = dec <|> hex
+int = hex <|> dec
 
 -- | Parsers a decimal integer.
 dec :: Parser String Int
@@ -41,7 +41,7 @@ dec = do
 -- | Parses a hexadeicmal integer.
 hex :: Parser String Int
 hex = do
-  char 'x'
+  string "0x" <|> string "x"
   s <- rest hexDigit
   case (readHex s) of
     [(h, _)] -> return h
