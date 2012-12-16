@@ -9,4 +9,7 @@ import LC4.LC4
 
 main = do
   res <- readASM (asmParser) "os.asm"
+  case res of
+    Right x -> putStr x
+    Left _ -> return ()
   return ()

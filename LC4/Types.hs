@@ -5,6 +5,7 @@ import Prelude
 import Data.Bits()
 import Data.Map
 import Data.IntMap
+import Data.Word()
 
 data Reg =
   R0 |
@@ -15,7 +16,7 @@ data Reg =
   R5 |
   R6 |
   R7
-  deriving (Show, Eq)
+  deriving (Show, Eq, Ord)
 
 data Value = 
   UIMM4  Int |
@@ -77,7 +78,9 @@ data Operator =
   SRL     |
   LEA     |
   LC      |
-  BINARY 
+  RET     |
+  BINARY |
+  END
   deriving (Show, Eq)
 
 data Instruction =
