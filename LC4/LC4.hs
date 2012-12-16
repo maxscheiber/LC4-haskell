@@ -197,20 +197,20 @@ process (OneRegOneVal op rs (IMM16 imm)) = do
   case op of
     CMPI -> let sub = rsval - imm in
             if (sub < 0) then
-            put $ m { psr = (setBit (clearBit (clearBit (psr m) 0) 1) 2), pc = (pc            m) + 1 }
+            put $ m { psr = (setBit (clearBit (clearBit (psr m) 0) 1) 2), pc = (pc m) + 1 }
           else if (sub == 0) then
-            put $ m {psr = (setBit (clearBit (clearBit (psr m) 0) 2) 1), pc = pc m              + 1 }
+            put $ m {psr = (setBit (clearBit (clearBit (psr m) 0) 2) 1), pc = pc m + 1 }
           else
-            put $ m {psr = (setBit (clearBit (clearBit (psr m) 1) 2) 0), pc = pc m             + 1 }
+            put $ m {psr = (setBit (clearBit (clearBit (psr m) 1) 2) 0), pc = pc m + 1 }
     CMPIU -> let unsigned1 = intToWord rsval in
              let unsigned2 = intToWord imm in
              let sub = wordToInt (unsigned1 - unsigned2) in
              if (sub < 0) then
-              put $ m { psr = (setBit (clearBit (clearBit (psr m) 0) 1) 2), pc = (              pc m) + 1 }
+              put $ m { psr = (setBit (clearBit (clearBit (psr m) 0) 1) 2), pc = (pc m) + 1 }
              else if (sub == 0) then
-               put $ m {psr = (setBit (clearBit (clearBit (psr m) 0) 2) 1), pc =                    pc m + 1 }
+               put $ m {psr = (setBit (clearBit (clearBit (psr m) 0) 2) 1), pc = pc m + 1 }
                   else
-                   put $ m {psr = (setBit (clearBit (clearBit (psr m) 1) 2) 0), pc                  = pc m + 1 }
+                   put $ m {psr = (setBit (clearBit (clearBit (psr m) 1) 2) 0), pc = pc m + 1 }
     CONST -> put $ m {regs = Map.insert rs imm (regs m), pc = pc m + 1}
     HICONST -> let newval = ((rsval .&. 255) .|. (imm `shiftL` 8)) in
                put $ m {regs = Map.insert rs newval (regs m), pc = pc m + 1}
