@@ -78,7 +78,6 @@ data Operator =
   SRL     |
   LEA     |
   LC      |
-  RET     |
   BINARY |
   END
   deriving (Show, Eq)

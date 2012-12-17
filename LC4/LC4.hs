@@ -223,6 +223,7 @@ process (OneRegOneStr op rd label) = do
   -- STILL NEED TO DO LC
   case op of
     LEA -> put $ m { regs = Map.insert rd (Map.findWithDefault 0 label (labels m)) (regs m), pc = pc m + 1 }
+    LC -> put $ m {regs = Map.insert rd (Map.findWithDefault 0 label (labels m)) (regs m), pc = pc m + 1}
     _ -> return ()
   let next_instr = IntMap.findWithDefault (Lone END) (pc m) (memory m)
   process next_instr
@@ -239,16 +240,37 @@ process (OneReg op rs) = do
   return ()
 process (OneVal op (IMM16 imm)) = do
   m <- get
+  let nzp = (psr m) .&. 7
+  let next_pc i = if nzp .&. i /= 0 then pc m + 1 + imm else pc m + 1
+  case op of
+    BRn -> put $ m { pc = next_pc 4}
+    BRnz -> put $ m { pc = next_pc 6 }
+    BRnp -> put $ m { pc = next_pc 5 }
+    BRz -> put $ m {pc = next_pc 2 }
+    BRzp -> put $ m {pc = next_pc 3 }
+    BRp -> put $ m {pc = next_pc 1 }
+    BRnzp -> put $ m {pc = pc m + 1 + imm}
+    JSR -> put $ m {regs = Map.insert R7 (pc m + 1) (regs m), pc = ((pc m) .&.
+                                          32768) .|. (imm `shift` 4)}
+    JMP -> put $ m { pc = pc m + 1 + imm }
+    TRAP -> put $ m {regs = Map.insert R7 (pc m + 1) (regs m), pc = (32768 .|. imm), psr = (psr m) `setBit` 15 }
+    _ -> return ()
+  let next_instr = IntMap.findWithDefault (Lone END) (pc m) (memory m)
+  process next_instr
   return ()
-process (OneStr op label) = undefined
+process (OneStr op label) = do
+  m <- get
+  let imm = Map.findWithDefault 0 label (labels m)
+  process (OneVal op (IMM16 imm))
+  return ()
 process (Lone op) = do
   m <- get
   case op of
     NOP -> put $ m
     RTI -> put $ m {psr = (psr m) `clearBit` 15, pc = Map.findWithDefault 0 R7 (regs m) }
-    RET -> put $ m {pc = Map.findWithDefault 0 R7 (regs m) }
     _ -> return ()
   let next_instr = IntMap.findWithDefault (Lone END) (pc m) (memory m)
   process next_instr
   return ()
+process _ = return ()
   
