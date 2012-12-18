@@ -29,6 +29,14 @@ intToWord s = fromIntegral s
 wordToInt :: Word -> Int
 wordToInt s = fromIntegral s
 
+writeToReg :: Reg -> Int -> State Machine ()
+writeToReg rd val = do
+  m <- get
+  let regs' = Map.insert rd val (regs m)
+  let nzp' = if val > 0 then 1 else if val == 0 then 2 else 4
+  put (m { psr = (hexToInt "8000" .&. psr m) .|. nzp', regs = regs' })
+  return ()
+
 userCode, userData, osCode, osData :: Int
 userCode = 0
 userData = hexToInt "4000"
@@ -132,41 +140,67 @@ preprocess (Label lbl:ls) = do
 
 process :: Instruction -> State Machine ()
 process (Lone END) = return ()
-process (ThreeReg op rd rs rt) = do
+process instr@(ThreeReg op rd rs rt) = do
   m <- get
   let rsval = Map.findWithDefault (error $ "uninitialized register " ++ show rs) rs (regs m)
   let rtval = Map.findWithDefault (error $ "uninitialized register " ++ show rt) rt (regs m)
   case op of
-    ADD -> put $ m { regs = Map.insert rd (rsval+rtval) (regs m), pc = (pc m) +1 }
-    SUB -> put $ m { regs = Map.insert rd (rsval-rtval) (regs m), pc = (pc m) +1 }
-    MUL -> put $ m { regs = Map.insert rd (rsval*rtval) (regs m), pc = (pc m) +1 }
-    DIV -> put $ m { regs = Map.insert rd (rsval `div` rtval) (regs m), pc  = (pc m) +1}
-    AND -> put $ m { regs = Map.insert rd (rsval .&. rtval) (regs m), pc = (pc m) + 1 }
-    OR -> put $ m {regs = Map.insert rd (rsval .|. rtval) (regs m), pc = (pc m) + 1}
-    XOR -> put $ m {regs = Map.insert rd (rsval `xor` rtval) (regs m), pc = (pc m) + 1}
-    MOD -> put $ m {regs = Map.insert rd (rsval `mod` rtval) (regs m), pc = (pc m) + 1}
-    _ -> return ()
+    ADD -> do writeToReg rd (rsval + rtval)
+              m' <- get
+              put $ m' { pc = (pc m') + 1 }
+    SUB -> do writeToReg rd (rsval - rtval)
+              m' <- get
+              put $ m' { pc = (pc m') + 1 }
+    MUL -> do writeToReg rd (rsval * rtval)
+              m' <- get
+              put $ m' { pc = (pc m') + 1 }
+    DIV -> do writeToReg rd (rsval `div` rtval)
+              m' <- get
+              put $ m' { pc = (pc m') + 1 }
+    AND -> do writeToReg rd (rsval .&. rtval)
+              m' <- get
+              put $ m' { pc = (pc m') + 1 }
+    OR ->  do writeToReg rd (rsval .|. rtval)
+              m' <- get
+              put $ m' { pc = (pc m') + 1 }
+    XOR -> do writeToReg rd (rsval `xor` rtval)
+              m' <- get
+              put $ m' { pc = (pc m') + 1 }
+    MOD -> do writeToReg rd (rsval `mod` rtval)
+              m' <- get
+              put $ m' { pc = (pc m') + 1 }
+    _ -> error $ "Invalid instruction " ++ show instr
   m' <- get
   let next_instr = IntMap.findWithDefault (Lone END) (pc m') (memory m')
   process next_instr
   return ()
-process (TwoRegOneVal op rd rs (IMM16 imm)) = do
+process instr@(TwoRegOneVal op rd rs (IMM16 imm)) = do
   m <- get
-  let rsval = Map.findWithDefault 0 rs (regs m)
+  let rsval = Map.findWithDefault (error $ "uninitialized register " ++ show rs) rs (regs m)
   case op of
-    ADD -> put $ m {regs = Map.insert rd (rsval+imm) (regs m), pc = (pc m) + 1 }
-    AND -> put $ m {regs = Map.insert rd (rsval .&. imm) (regs m), pc = (pc m) + 1}
+    ADD -> do writeToReg rd (rsval + imm)
+              m' <- get
+              put $ m' { pc = (pc m') + 1 }
+    AND -> do writeToReg rd (rsval .&. imm)
+              m' <- get
+              put $ m' { pc = (pc m') + 1 }
     LDR -> let memval = IntMap.findWithDefault (OneVal BINARY (IMM16 0)) (rsval+imm) (memory m) in
       case memval of
         OneVal BINARY (IMM16 i) -> put $ m {regs = Map.insert rd i (regs m), pc = (pc m) + 1}
-        _ -> return ()
+        _ -> error $ "Invalid load " ++ show instr
     STR -> let rtval = Map.findWithDefault (error $ "uninitialized register " ++ show rd) rd (regs m) in
       put $ m {memory = IntMap.insert (rsval + imm) (OneVal BINARY (IMM16 rtval)) (memory m), pc = (pc m) + 1}
-    SLL -> put $ m {regs = Map.insert rd (rsval `shift` imm) (regs m), pc = (pc m) + 1 }
-    SRA -> put $ m {regs = Map.insert rd (rsval `shiftR` imm) (regs m), pc = (pc m) + 1 }
-    SRL -> let newshift = shiftR (intToWord rsval) imm in
-           put $ m {regs = Map.insert rd (wordToInt newshift) (regs m), pc = (pc m) + 1}
-    _ -> return ()  
+    SLL -> do writeToReg rd (rsval `shift` imm)
+              m' <- get
+              put $ m' { pc = (pc m') + 1 }
+    SRA -> do writeToReg rd (rsval `shiftR` imm)
+              m' <- get
+              put $ m' { pc = (pc m') + 1 }
+    SRL -> do let newshift = shiftR (intToWord rsval) imm
+              writeToReg rd $ wordToInt newshift
+              m' <- get
+              put $ m' { pc = (pc m') + 1 }
+    _ -> error $ "Invalid instruction " ++ show instr 
   m' <- get
   let next_instr = IntMap.findWithDefault (Lone END) (pc m') (memory m')
   process next_instr
@@ -218,9 +252,13 @@ process (OneRegOneVal op rs (IMM16 imm)) = do
                put $ m {psr = (setBit (clearBit (clearBit (psr m) 0) 2) 1), pc = pc m + 1 }
                   else
                    put $ m {psr = (setBit (clearBit (clearBit (psr m) 1) 2) 0), pc = pc m + 1 }
-    CONST -> put $ m {regs = Map.insert rs imm (regs m), pc = pc m + 1}
-    HICONST -> let newval = ((rsval .&. 255) .|. (imm `shiftL` 8)) in
-               put $ m {regs = Map.insert rs newval (regs m), pc = pc m + 1}
+    CONST -> do writeToReg rs imm
+                m' <- get
+                put $ m' { pc = (pc m') + 1 }
+    HICONST -> do let newval = ((rsval .&. 255) .|. (imm `shiftL` 8))
+                  writeToReg rs newval
+                  m' <- get
+                  put $ m' { pc = (pc m') + 1 }
     _ -> return ()
   m' <- get
   let next_instr = IntMap.findWithDefault (Lone END) (pc m') (memory m')
@@ -229,8 +267,12 @@ process (OneRegOneVal op rs (IMM16 imm)) = do
 process (OneRegOneStr op rd label) = do
   m <- get
   case op of
-    LEA -> put $ m { regs = Map.insert rd (Map.findWithDefault 0 label (labels m)) (regs m), pc = pc m + 1 }
-    LC -> put $ m {regs = Map.insert rd (Map.findWithDefault 0 label (labels m)) (regs m), pc = pc m + 1}
+    LEA -> do writeToReg rd (Map.findWithDefault (error $ "Cannot find label " ++ label) label (labels m))
+              m' <- get
+              put $ m' { pc = (pc m') + 1 }
+    LC ->  do writeToReg rd (Map.findWithDefault (error $ "Cannot find label " ++ label) label (labels m))
+              m' <- get
+              put $ m' { pc = (pc m') + 1 }
     _ -> return ()
   m' <- get
   let next_instr = IntMap.findWithDefault (Lone END) (pc m') (memory m')
@@ -238,10 +280,12 @@ process (OneRegOneStr op rd label) = do
   return ()
 process (OneReg op rs) = do
   m <- get
-  let rsval = Map.findWithDefault 0 rs (regs m)
+  let rsval = Map.findWithDefault (error $ "Uninitialized register " ++ show rs) rs (regs m)
   case op of
-    JSRR -> put $ m { regs = Map.insert R7 (pc m + 1) (regs m), pc = rsval }
-    JMPR -> put $ m {pc = rsval }
+    JSRR -> do writeToReg R7 (pc m + 1)
+               m' <- get
+               put $ m' { pc = rsval }
+    JMPR -> put $ m { pc = rsval }
     _ -> return ()
   m' <- get
   let next_instr = IntMap.findWithDefault (Lone END) (pc m') (memory m')
@@ -259,10 +303,13 @@ process (OneVal op (IMM16 imm)) = do -- imm is ABSOLUTE ADDRESS to jump to
     BRzp -> put $ m { pc = next_pc 3 }
     BRp -> put $ m { pc = next_pc 1 }
     BRnzp -> put $ m { pc = imm }
-    JSR -> put $ m {regs = Map.insert R7 (pc m + 1) (regs m), pc = ((pc m) .&.
-                                          32768) .|. (imm `shift` 4)}
+    JSR -> do writeToReg R7 (pc m + 1)
+              m' <- get
+              put $ m' { pc = ((pc m) .&. 32768) .|. (imm `shift` 4) }
     JMP -> put $ m { pc = imm }
-    TRAP -> put $ m {regs = Map.insert R7 (pc m + 1) (regs m), pc = (32768 .|. imm), psr = (psr m) `setBit` 15 }
+    TRAP -> do writeToReg R7 (pc m + 1)
+               m' <- get
+               put $ m' { pc = 32768 .|. imm, psr = (psr m) `setBit` 15 }
     _ -> return ()
   m' <- get
   let next_instr = IntMap.findWithDefault (Lone END) (pc m') (memory m')
