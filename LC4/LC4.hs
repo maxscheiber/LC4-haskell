@@ -14,7 +14,7 @@ import System.IO
 import Data.Map as Map hiding (filter)
 import Data.IntMap as IntMap hiding (filter)
 import Control.Monad.State
-import Numeric (readHex)
+import Numeric (readHex, showHex)
 import Data.Bits
 import Data.Word
 
@@ -231,8 +231,8 @@ process instr@(TwoRegOneVal op rd rs (IMM16 imm)) = do
               do setReg rd i
                  m' <- get
                  setPC $ 1 + pc m'
-            else error $ "Cannot load from address " ++ show (rsval + imm) ++ 
-              " with PSR[15] " ++ show psr15
+            else error $ "Cannot load from address 0x" ++ Numeric.showHex (rsval + imm) "" ++ 
+              " with PSR[15] " ++ (show psr15)
         _ -> error $ "Invalid load " ++ show instr
     STR -> 
       let rtval = Map.findWithDefault (regError rd) rd (regs m) in
@@ -240,7 +240,7 @@ process instr@(TwoRegOneVal op rd rs (IMM16 imm)) = do
       if (inUserData (rsval + imm) || (psr15 && inOSData (rsval + imm))) then
         put $ m {memory = IntMap.insert (rsval + imm) (OneVal BINARY 
           (IMM16 rtval)) (memory m), pc = (pc m) + 1}
-      else error $ "Cannot store to address " ++ show (rsval + imm) ++ 
+      else error $ "Cannot store to address 0x" ++ Numeric.showHex (rsval + imm) "" ++ 
         " with PSR[15] " ++ show psr15
     SLL -> do setReg rd (rsval `shift` imm)
               m' <- get

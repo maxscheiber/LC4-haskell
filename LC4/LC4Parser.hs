@@ -39,7 +39,9 @@ commentP = do
 labelIP :: Parser String Line
 labelIP = do
   lbl <- ws $ rest . satisfy $ not . (== '\n')
-  return $ Label lbl
+  if isSpace `any` lbl then
+    error $ "Could not parse line " ++ lbl
+  else return $ Label lbl
 
 -- | Parse an Instruction from one of its constructors
 instrP :: Parser String Instruction
@@ -171,15 +173,3 @@ uconstP = do
   ws . string $ ".UCONST"
   i <- ws int
   return $ UCONST s (UIMM16 i)
-
-{- addrP   = ws $ string ".ADDR"   >> (ws $ int >>= \i -> return (ADDR $ UIMM16 i))
-fillP   = ws $ string ".FILL"   >> (ws $ int >>= \i -> return (FILL $ IMM16 i))
-blkwP   = ws $ string ".BLKW"   >> (ws $ int >>= \i -> return (BLKW $ UIMM16 i))
-dconstP = ws $ string ".CONST"  >> (ws $ int >>= \i -> return (DCONST $ IMM16 i))
-uconstP = ws $ string ".UCONST" >> (ws $ int >>= \i -> return (UCONST $ UIMM16 i))
-
-directP op = do
-  s <- ws $ labelP
-  string $ '.' : show op
-  i <- ws int
-  return $ op s (IMM16 i) -}
