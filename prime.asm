@@ -7,7 +7,7 @@
 	.CODE
 	.ADDR 0x0000 		; start instructions at address 0
 
-	CONST R0, #65
+	CONST R0, #617
 	CONST R1, #0 		; initialize R1, the prime flag, to 0
 	CONST R2, #2 		; initialize B pre-emptively to 2
 

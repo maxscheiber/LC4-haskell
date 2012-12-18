@@ -205,7 +205,7 @@ process instr@(TwoRegOneVal op rd rs (IMM16 imm)) = do
   let next_instr = IntMap.findWithDefault (Lone END) (pc m') (memory m')
   process next_instr
   return ()
-process (TwoReg op rs rt) = do
+process instr@(TwoReg op rs rt) = do
   m <- get
   let rsval = Map.findWithDefault (error $ "uninitialized register " ++ show rs) rs (regs m)
   let rtval = Map.findWithDefault (error $ "uninitialized register " ++ show rt) rt (regs m)
@@ -227,12 +227,12 @@ process (TwoReg op rs rt) = do
           else
             put $ m {psr = (setBit (clearBit (clearBit (psr m) 1) 2) 0), pc = pc m + 1 }
     NOT -> put $ m { regs = Map.insert rs (complement rtval) (regs m), pc = pc m + 1}
-    _ -> return ()
+    _ -> error $ "Invalid instruction " ++ show instr
   m' <- get
   let next_instr = IntMap.findWithDefault (Lone END) (pc m') (memory m')
   process next_instr
   return ()
-process (OneRegOneVal op rs (IMM16 imm)) = do
+process instr@(OneRegOneVal op rs (IMM16 imm)) = do
   m <- get
   let rsval = Map.findWithDefault (error $ "undefined register " ++ show rs) rs (regs m)
   case op of
@@ -259,7 +259,7 @@ process (OneRegOneVal op rs (IMM16 imm)) = do
                   writeToReg rs newval
                   m' <- get
                   put $ m' { pc = (pc m') + 1 }
-    _ -> return ()
+    _ -> error $ "Invalid instruction " ++ show instr
   m' <- get
   let next_instr = IntMap.findWithDefault (Lone END) (pc m') (memory m')
   process next_instr

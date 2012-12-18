@@ -30,5 +30,3 @@ LOOP
 	BRnzp LOOP		; go to the start of the while loop
 
 END
-
-	BRnzp END 		; infinitely loop once done
