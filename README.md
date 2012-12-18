@@ -1,7 +1,7 @@
 LC4-haskell
 ===========
 
-Purely functional interpreter for the educational LC-4 ISA, written by Max Scheiber (scheiber), and Ashutosh Goel (asgoel).
+Purely functional interpreter for the educational LC-4 ISA, written by Max Scheiber (scheiber), and Ashutosh Goel (asgoel). The LC-4 ISA is a custom instruction set architecture created at the University of Pennslyvania, based off of the popular LC-3 ISA. The LC-4 ISA is commonly used for educational purposes, in classes such as CIS 240 (Intro. to Computer Architecture) at the University of Pennsylvania.
 
 Main
 ===========
