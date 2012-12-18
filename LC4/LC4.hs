@@ -3,7 +3,6 @@
 -- | Author: Max Scheiber, University of Pennsylvania '15, maxnscheiber@gmail.com
 -- | Version: 0.2
 -- | Assembly and simulation of the LC4 ISA.
--- | KNOWN BUGS: no error checking, merely preprocesses and does not run
 
 module LC4.LC4 where
 import Prelude
@@ -29,12 +28,25 @@ intToWord s = fromIntegral s
 wordToInt :: Word -> Int
 wordToInt s = fromIntegral s
 
-writeToReg :: Reg -> Int -> State Machine ()
-writeToReg rd val = do
+-- | Some useful methods for changing state of simulation; also used for REPL
+setReg :: Reg -> Int -> State Machine ()
+setReg rd val = do
   m <- get
-  let regs' = Map.insert rd val (regs m)
+  put $ m { regs = Map.insert rd val (regs m) }
+  setPSR val
+  return ()
+
+setPSR :: Int -> State Machine ()
+setPSR val = do
+  m <- get
   let nzp' = if val > 0 then 1 else if val == 0 then 2 else 4
-  put (m { psr = (hexToInt "8000" .&. psr m) .|. nzp', regs = regs' })
+  put $ m { psr = (hexToInt "8000" .&. psr m) .|. nzp' }
+  return ()
+
+setPC :: Int -> State Machine ()
+setPC pc' = do
+  m <- get
+  put $ m { pc = pc' }
   return ()
 
 -- | Some useful constants and related functions
@@ -94,6 +106,9 @@ readASM p name = do
   f <- openFile name ReadMode
   str <- hGetContents f
   return $ parseASM p str
+
+{- loadOBJ :: [Line] -> Machine
+loadOBJ parsed = execState (preprocess parsed) machine -}
 
 -- | Simulate the .asm file inputted.
 runASM :: Parser String [Line] -> String -> IO (Either String Machine)
@@ -168,30 +183,30 @@ process instr@(ThreeReg op rd rs rt) = do
   let rsval = Map.findWithDefault (regError rs) rs (regs m)
   let rtval = Map.findWithDefault (regError rt) rt (regs m)
   case op of
-    ADD -> do writeToReg rd (rsval + rtval)
+    ADD -> do setReg rd (rsval + rtval)
               m' <- get
-              put $ m' { pc = (pc m') + 1 }
-    SUB -> do writeToReg rd (rsval - rtval)
+              setPC $ 1 + pc m'
+    SUB -> do setReg rd (rsval - rtval)
               m' <- get
-              put $ m' { pc = (pc m') + 1 }
-    MUL -> do writeToReg rd (rsval * rtval)
+              setPC $ 1 + pc m'
+    MUL -> do setReg rd (rsval * rtval)
               m' <- get
-              put $ m' { pc = (pc m') + 1 }
-    DIV -> do writeToReg rd (rsval `div` rtval)
+              setPC $ 1 + pc m'
+    DIV -> do setReg rd (rsval `div` rtval)
               m' <- get
-              put $ m' { pc = (pc m') + 1 }
-    AND -> do writeToReg rd (rsval .&. rtval)
+              setPC $ 1 + pc m'
+    AND -> do setReg rd (rsval .&. rtval)
               m' <- get
-              put $ m' { pc = (pc m') + 1 }
-    OR ->  do writeToReg rd (rsval .|. rtval)
+              setPC $ 1 + pc m'
+    OR ->  do setReg rd (rsval .|. rtval)
               m' <- get
-              put $ m' { pc = (pc m') + 1 }
-    XOR -> do writeToReg rd (rsval `xor` rtval)
+              setPC $ 1 + pc m'
+    XOR -> do setReg rd (rsval `xor` rtval)
               m' <- get
-              put $ m' { pc = (pc m') + 1 }
-    MOD -> do writeToReg rd (rsval `mod` rtval)
+              setPC $ 1 + pc m'
+    MOD -> do setReg rd (rsval `mod` rtval)
               m' <- get
-              put $ m' { pc = (pc m') + 1 }
+              setPC $ 1 + pc m'
     _ -> instrError instr
   m' <- get
   let next_instr = IntMap.findWithDefault (Lone END) (pc m') (memory m')
@@ -202,20 +217,20 @@ process instr@(TwoRegOneVal op rd rs (IMM16 imm)) = do
   m <- get
   let rsval = Map.findWithDefault (regError rs) rs (regs m)
   case op of
-    ADD -> do writeToReg rd (rsval + imm)
+    ADD -> do setReg rd (rsval + imm)
               m' <- get
-              put $ m' { pc = (pc m') + 1 }
-    AND -> do writeToReg rd (rsval .&. imm)
+              setPC $ 1 + pc m'
+    AND -> do setReg rd (rsval .&. imm)
               m' <- get
-              put $ m' { pc = (pc m') + 1 }
+              setPC $ 1 + pc m'
     LDR -> let memval = IntMap.findWithDefault (OneVal BINARY (IMM16 0)) (rsval + imm) (memory m) in
       case memval of
         OneVal BINARY (IMM16 i) -> 
             let psr15 = psr m `testBit` 15 in
             if (inUserData (rsval + imm) || (psr15 && inOSData (rsval + imm))) then
-              do writeToReg rd i
+              do setReg rd i
                  m' <- get
-                 put $ m' { pc = (pc m') + 1 }
+                 setPC $ 1 + pc m'
             else error $ "Cannot load from address " ++ show (rsval + imm) ++ 
               " with PSR[15] " ++ show psr15
         _ -> error $ "Invalid load " ++ show instr
@@ -227,16 +242,16 @@ process instr@(TwoRegOneVal op rd rs (IMM16 imm)) = do
           (IMM16 rtval)) (memory m), pc = (pc m) + 1}
       else error $ "Cannot store to address " ++ show (rsval + imm) ++ 
         " with PSR[15] " ++ show psr15
-    SLL -> do writeToReg rd (rsval `shift` imm)
+    SLL -> do setReg rd (rsval `shift` imm)
               m' <- get
-              put $ m' { pc = (pc m') + 1 }
-    SRA -> do writeToReg rd (rsval `shiftR` imm)
+              setPC $ 1 + pc m'
+    SRA -> do setReg rd (rsval `shiftR` imm)
               m' <- get
-              put $ m' { pc = (pc m') + 1 }
+              setPC $ 1 + pc m'
     SRL -> do let newshift = shiftR (intToWord rsval) imm
-              writeToReg rd $ wordToInt newshift
+              setReg rd $ wordToInt newshift
               m' <- get
-              put $ m' { pc = (pc m') + 1 }
+              setPC $ 1 + pc m'
     _ ->  instrError instr
   m' <- get
   let next_instr = IntMap.findWithDefault (Lone END) (pc m') (memory m')
@@ -248,23 +263,18 @@ process instr@(TwoReg op rs rt) = do
   let rsval = Map.findWithDefault (regError rs) rs (regs m)
   let rtval = Map.findWithDefault (regError rt) rt (regs m)
   case op of
-    CMP -> let sub = rsval - rtval in
-          if (sub < 0) then
-            put $ m { psr = (setBit (clearBit (clearBit (psr m) 0) 1) 2), pc = (pc m) + 1 }
-          else if (sub == 0) then
-            put $ m {psr = (setBit (clearBit (clearBit (psr m) 0) 2) 1), pc = pc m + 1 }
-          else
-            put $ m {psr = (setBit (clearBit (clearBit (psr m) 1) 2) 0), pc = pc m + 1 }
+    CMP -> do setPSR $ rsval - rtval
+              m' <- get
+              setPC $ 1 + pc m'
     CMPU -> let unsigned1 = intToWord rsval in
-           let unsigned2 = intToWord rtval in
-           let sub = wordToInt (unsigned1 - unsigned2) in
-           if (sub < 0) then
-            put $ m { psr = (setBit (clearBit (clearBit (psr m) 0) 1) 2), pc = (pc m) + 1 }
-          else if (sub == 0) then
-            put $ m {psr = (setBit (clearBit (clearBit (psr m) 0) 2) 1), pc = pc m + 1 }
-          else
-            put $ m {psr = (setBit (clearBit (clearBit (psr m) 1) 2) 0), pc = pc m + 1 }
-    NOT -> put $ m { regs = Map.insert rs (complement rtval) (regs m), pc = pc m + 1}
+            let unsigned2 = intToWord rtval in
+            let sub = wordToInt (unsigned1 - unsigned2) in
+            do setPSR sub
+               m' <- get
+               setPC $ 1 + pc m'
+    NOT -> do setReg rs (complement rtval)
+              m' <- get
+              setPC $ 1 + pc m'
     _ ->  instrError instr
   m' <- get
   let next_instr = IntMap.findWithDefault (Lone END) (pc m') (memory m')
@@ -275,30 +285,23 @@ process instr@(OneRegOneVal op rs (IMM16 imm)) = do
   m <- get
   let rsval = Map.findWithDefault (regError rs) rs (regs m)
   case op of
-    CMPI -> let sub = rsval - imm in
-            if (sub < 0) then
-            put $ m { psr = (setBit (clearBit (clearBit (psr m) 0) 1) 2), pc = (pc m) + 1 }
-          else if (sub == 0) then
-            put $ m {psr = (setBit (clearBit (clearBit (psr m) 0) 2) 1), pc = pc m + 1 }
-          else
-            put $ m {psr = (setBit (clearBit (clearBit (psr m) 1) 2) 0), pc = pc m + 1 }
+    CMPI -> do setPSR $ rsval - imm
+               m' <- get
+               setPC $ 1 + pc m'
     CMPIU -> let unsigned1 = intToWord rsval in
              let unsigned2 = intToWord imm in
              let sub = wordToInt (unsigned1 - unsigned2) in
-             if (sub < 0) then
-              put $ m { psr = (setBit (clearBit (clearBit (psr m) 0) 1) 2), pc = (pc m) + 1 }
-             else if (sub == 0) then
-               put $ m {psr = (setBit (clearBit (clearBit (psr m) 0) 2) 1), pc = pc m + 1 }
-                  else
-                   put $ m {psr = (setBit (clearBit (clearBit (psr m) 1) 2) 0), pc = pc m + 1 }
-    CONST -> do writeToReg rs imm
+             do setPSR sub
                 m' <- get
-                put $ m' { pc = (pc m') + 1 }
+                setPC $ 1 + pc m'
+    CONST -> do setReg rs imm
+                m' <- get
+                setPC $ 1 + pc m'
     HICONST -> do let newval = ((rsval .&. 255) .|. (imm `shiftL` 8))
-                  writeToReg rs newval
+                  setReg rs newval
                   m' <- get
-                  put $ m' { pc = (pc m') + 1 }
-    _ ->  instrError instr
+                  setPC $ 1 + pc m'
+    _ -> instrError instr
   m' <- get
   let next_instr = IntMap.findWithDefault (Lone END) (pc m') (memory m')
   process next_instr
@@ -307,13 +310,13 @@ process instr@(OneRegOneVal op rs (IMM16 imm)) = do
 process instr@(OneRegOneStr op rd label) = do
   m <- get
   case op of
-    LEA -> do writeToReg rd (Map.findWithDefault (error $ "Cannot find label " ++ label) label (labels m))
+    LEA -> do setReg rd (Map.findWithDefault (error $ "Cannot find label " ++ label) label (labels m))
               m' <- get
-              put $ m' { pc = (pc m') + 1 }
-    LC ->  do writeToReg rd (Map.findWithDefault (error $ "Cannot find label " ++ label) label (labels m))
+              setPC $ 1 + pc m'
+    LC ->  do setReg rd (Map.findWithDefault (error $ "Cannot find label " ++ label) label (labels m))
               m' <- get
-              put $ m' { pc = (pc m') + 1 }
-    _ ->  instrError instr
+              setPC $ 1 + pc m'
+    _ -> instrError instr
   m' <- get
   let next_instr = IntMap.findWithDefault (Lone END) (pc m') (memory m')
   process next_instr
@@ -323,11 +326,10 @@ process instr@(OneReg op rs) = do
   m <- get
   let rsval = Map.findWithDefault (regError rs) rs (regs m)
   case op of
-    JSRR -> do writeToReg R7 (pc m + 1)
-               m' <- get
-               put $ m' { pc = rsval }
-    JMPR -> put $ m { pc = rsval }
-    _ ->  instrError instr
+    JSRR -> do setReg R7 (pc m + 1)
+               setPC rsval
+    JMPR -> setPC rsval
+    _ -> instrError instr
   m' <- get
   let next_instr = IntMap.findWithDefault (Lone END) (pc m') (memory m')
   process next_instr
@@ -338,20 +340,21 @@ process instr@(OneVal op (IMM16 imm)) = do -- imm is ABSOLUTE ADDRESS to jump to
   let nzp = (psr m) .&. 7
   let next_pc i = if nzp .&. i /= 0 then imm else pc m + 1
   case op of
-    BRn -> put $ m { pc = next_pc 4 }
-    BRnz -> put $ m { pc = next_pc 6 }
-    BRnp -> put $ m { pc = next_pc 5 }
-    BRz -> put $ m { pc = next_pc 2 }
-    BRzp -> put $ m { pc = next_pc 3 }
-    BRp -> put $ m { pc = next_pc 1 }
-    BRnzp -> put $ m { pc = imm }
-    JSR -> do writeToReg R7 (pc m + 1)
+    BRn ->   setPC $ next_pc 4
+    BRnz ->  setPC $ next_pc 6
+    BRnp ->  setPC $ next_pc 5
+    BRz ->   setPC $ next_pc 2
+    BRzp ->  setPC $ next_pc 3
+    BRp ->   setPC $ next_pc 1
+    BRnzp -> setPC $ imm
+    JSR -> do setReg R7 (pc m + 1)
               m' <- get
-              put $ m' { pc = ((pc m) .&. 32768) .|. (imm `shift` 4) }
+              setPC $ ((pc m') .&. 32768) .|. (imm `shift` 4)
     JMP -> put $ m { pc = imm }
-    TRAP -> do writeToReg R7 (pc m + 1)
+    TRAP -> do setReg R7 (pc m + 1)
+               setPC $ 32768 .|. imm
                m' <- get
-               put $ m' { pc = 32768 .|. imm, psr = (psr m) `setBit` 15 }
+               put $ m' { psr = (psr m) `setBit` 15 }
     _ -> instrError instr
   m' <- get
   let next_instr = IntMap.findWithDefault (Lone END) (pc m') (memory m')
@@ -367,12 +370,14 @@ process (OneStr op label) = do
 process instr@(Lone op) = do
   m <- get
   case op of
-    NOP -> put $ m
-    RTI -> put $ m {psr = (psr m) `clearBit` 15, pc = Map.findWithDefault (regError R7) R7 (regs m) }
+    NOP -> setPC $ 1 + pc m
+    RTI -> do put $ m {psr = (psr m) `clearBit` 15 }
+              m' <- get
+              setPC $ Map.findWithDefault (regError R7) R7 (regs m')
     _ ->  instrError instr
   m' <- get
   let next_instr = IntMap.findWithDefault (Lone END) (pc m') (memory m')
   process next_instr
   return ()
 
-process instr =  instrError instr
+process instr = instrError instr -- unknown instruction

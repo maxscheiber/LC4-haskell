@@ -16,7 +16,7 @@ data Reg =
   R5 |
   R6 |
   R7
-  deriving (Show, Eq, Ord)
+  deriving (Show, Eq, Ord, Read)
 
 data Value = 
   UIMM4  Int |
