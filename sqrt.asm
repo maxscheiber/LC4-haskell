@@ -4,7 +4,7 @@
 
 	.CODE
 	.ADDR 0x0000 		; start filling instructions at address 0
-
+	CONST R0, #0
 	CONST R1, #0		; initialize B to 0
 
 A_NOT_NEG
@@ -23,7 +23,3 @@ LOOP
 END
 
 	ADD R1, R1, #-1		; B--
-
-INFINITE
-
-	BRnzp INFINITE		; infinitely loop once done
