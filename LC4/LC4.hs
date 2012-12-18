@@ -37,11 +37,34 @@ writeToReg rd val = do
   put (m { psr = (hexToInt "8000" .&. psr m) .|. nzp', regs = regs' })
   return ()
 
-userCode, userData, osCode, osData :: Int
+-- | Some useful constants and related functions
+userCode, userData, osCode, osData, vidMem, devices :: Int
 userCode = 0
 userData = hexToInt "4000"
 osCode   = hexToInt "8000"
 osData   = hexToInt "A000"
+vidMem   = hexToInt "C000"
+devices  = hexToInt "FE00"
+
+kbsr, kbdr, adsr, addr, tsr, tir, vdcr :: Int
+kbsr = hexToInt "FE00"
+kbdr = hexToInt "FE02"
+adsr = hexToInt "FE04"
+addr = hexToInt "FE06"
+tsr  = hexToInt "FE08"
+tir  = hexToInt "FE0A"
+vdcr = hexToInt "FE0C"
+
+-- | Some error checking and error helpers
+inUserData, inOSData :: Int -> Bool
+inUserData i = userData <= i && i < osCode
+inOSData   i = osData   <= i && i < devices
+
+regError :: forall t a. Show a => a -> t
+regError r = error $ "undefined register " ++ show r
+
+instrError :: forall t a. Show a => a -> t
+instrError i = error $ "invalid instruction " ++ show i
 
 -- | Current Machine state.
 machine :: Machine
@@ -140,10 +163,11 @@ preprocess (Label lbl:ls) = do
 
 process :: Instruction -> State Machine ()
 process (Lone END) = return ()
+
 process instr@(ThreeReg op rd rs rt) = do
   m <- get
-  let rsval = Map.findWithDefault (error $ "uninitialized register " ++ show rs) rs (regs m)
-  let rtval = Map.findWithDefault (error $ "uninitialized register " ++ show rt) rt (regs m)
+  let rsval = Map.findWithDefault (regError rs) rs (regs m)
+  let rtval = Map.findWithDefault (regError rt) rt (regs m)
   case op of
     ADD -> do writeToReg rd (rsval + rtval)
               m' <- get
@@ -169,14 +193,15 @@ process instr@(ThreeReg op rd rs rt) = do
     MOD -> do writeToReg rd (rsval `mod` rtval)
               m' <- get
               put $ m' { pc = (pc m') + 1 }
-    _ -> error $ "Invalid instruction " ++ show instr
+    _ -> instrError instr
   m' <- get
   let next_instr = IntMap.findWithDefault (Lone END) (pc m') (memory m')
   process next_instr
   return ()
+
 process instr@(TwoRegOneVal op rd rs (IMM16 imm)) = do
   m <- get
-  let rsval = Map.findWithDefault (error $ "uninitialized register " ++ show rs) rs (regs m)
+  let rsval = Map.findWithDefault (regError rs) rs (regs m)
   case op of
     ADD -> do writeToReg rd (rsval + imm)
               m' <- get
@@ -184,12 +209,25 @@ process instr@(TwoRegOneVal op rd rs (IMM16 imm)) = do
     AND -> do writeToReg rd (rsval .&. imm)
               m' <- get
               put $ m' { pc = (pc m') + 1 }
-    LDR -> let memval = IntMap.findWithDefault (OneVal BINARY (IMM16 0)) (rsval+imm) (memory m) in
+    LDR -> let memval = IntMap.findWithDefault (OneVal BINARY (IMM16 0)) (rsval + imm) (memory m) in
       case memval of
-        OneVal BINARY (IMM16 i) -> put $ m {regs = Map.insert rd i (regs m), pc = (pc m) + 1}
+        OneVal BINARY (IMM16 i) -> 
+            let psr15 = psr m `testBit` 15 in
+            if (inUserData (rsval + imm) || (psr15 && inOSData (rsval + imm))) then
+              do writeToReg rd i
+                 m' <- get
+                 put $ m' { pc = (pc m') + 1 }
+            else error $ "Cannot load from address " ++ show (rsval + imm) ++ 
+              " with PSR[15] " ++ show psr15
         _ -> error $ "Invalid load " ++ show instr
-    STR -> let rtval = Map.findWithDefault (error $ "uninitialized register " ++ show rd) rd (regs m) in
-      put $ m {memory = IntMap.insert (rsval + imm) (OneVal BINARY (IMM16 rtval)) (memory m), pc = (pc m) + 1}
+    STR -> 
+      let rtval = Map.findWithDefault (regError rd) rd (regs m) in
+      let psr15 = psr m `testBit` 15 in
+      if (inUserData (rsval + imm) || (psr15 && inOSData (rsval + imm))) then
+        put $ m {memory = IntMap.insert (rsval + imm) (OneVal BINARY 
+          (IMM16 rtval)) (memory m), pc = (pc m) + 1}
+      else error $ "Cannot store to address " ++ show (rsval + imm) ++ 
+        " with PSR[15] " ++ show psr15
     SLL -> do writeToReg rd (rsval `shift` imm)
               m' <- get
               put $ m' { pc = (pc m') + 1 }
@@ -200,15 +238,16 @@ process instr@(TwoRegOneVal op rd rs (IMM16 imm)) = do
               writeToReg rd $ wordToInt newshift
               m' <- get
               put $ m' { pc = (pc m') + 1 }
-    _ -> error $ "Invalid instruction " ++ show instr 
+    _ ->  instrError instr
   m' <- get
   let next_instr = IntMap.findWithDefault (Lone END) (pc m') (memory m')
   process next_instr
   return ()
+
 process instr@(TwoReg op rs rt) = do
   m <- get
-  let rsval = Map.findWithDefault (error $ "uninitialized register " ++ show rs) rs (regs m)
-  let rtval = Map.findWithDefault (error $ "uninitialized register " ++ show rt) rt (regs m)
+  let rsval = Map.findWithDefault (regError rs) rs (regs m)
+  let rtval = Map.findWithDefault (regError rt) rt (regs m)
   case op of
     CMP -> let sub = rsval - rtval in
           if (sub < 0) then
@@ -227,14 +266,15 @@ process instr@(TwoReg op rs rt) = do
           else
             put $ m {psr = (setBit (clearBit (clearBit (psr m) 1) 2) 0), pc = pc m + 1 }
     NOT -> put $ m { regs = Map.insert rs (complement rtval) (regs m), pc = pc m + 1}
-    _ -> error $ "Invalid instruction " ++ show instr
+    _ ->  instrError instr
   m' <- get
   let next_instr = IntMap.findWithDefault (Lone END) (pc m') (memory m')
   process next_instr
   return ()
+
 process instr@(OneRegOneVal op rs (IMM16 imm)) = do
   m <- get
-  let rsval = Map.findWithDefault (error $ "undefined register " ++ show rs) rs (regs m)
+  let rsval = Map.findWithDefault (regError rs) rs (regs m)
   case op of
     CMPI -> let sub = rsval - imm in
             if (sub < 0) then
@@ -259,12 +299,13 @@ process instr@(OneRegOneVal op rs (IMM16 imm)) = do
                   writeToReg rs newval
                   m' <- get
                   put $ m' { pc = (pc m') + 1 }
-    _ -> error $ "Invalid instruction " ++ show instr
+    _ ->  instrError instr
   m' <- get
   let next_instr = IntMap.findWithDefault (Lone END) (pc m') (memory m')
   process next_instr
   return ()
-process (OneRegOneStr op rd label) = do
+
+process instr@(OneRegOneStr op rd label) = do
   m <- get
   case op of
     LEA -> do writeToReg rd (Map.findWithDefault (error $ "Cannot find label " ++ label) label (labels m))
@@ -273,25 +314,27 @@ process (OneRegOneStr op rd label) = do
     LC ->  do writeToReg rd (Map.findWithDefault (error $ "Cannot find label " ++ label) label (labels m))
               m' <- get
               put $ m' { pc = (pc m') + 1 }
-    _ -> return ()
+    _ ->  instrError instr
   m' <- get
   let next_instr = IntMap.findWithDefault (Lone END) (pc m') (memory m')
   process next_instr
   return ()
-process (OneReg op rs) = do
+
+process instr@(OneReg op rs) = do
   m <- get
-  let rsval = Map.findWithDefault (error $ "Uninitialized register " ++ show rs) rs (regs m)
+  let rsval = Map.findWithDefault (regError rs) rs (regs m)
   case op of
     JSRR -> do writeToReg R7 (pc m + 1)
                m' <- get
                put $ m' { pc = rsval }
     JMPR -> put $ m { pc = rsval }
-    _ -> return ()
+    _ ->  instrError instr
   m' <- get
   let next_instr = IntMap.findWithDefault (Lone END) (pc m') (memory m')
   process next_instr
   return ()
-process (OneVal op (IMM16 imm)) = do -- imm is ABSOLUTE ADDRESS to jump to
+
+process instr@(OneVal op (IMM16 imm)) = do -- imm is ABSOLUTE ADDRESS to jump to
   m <- get
   let nzp = (psr m) .&. 7
   let next_pc i = if nzp .&. i /= 0 then imm else pc m + 1
@@ -310,25 +353,27 @@ process (OneVal op (IMM16 imm)) = do -- imm is ABSOLUTE ADDRESS to jump to
     TRAP -> do writeToReg R7 (pc m + 1)
                m' <- get
                put $ m' { pc = 32768 .|. imm, psr = (psr m) `setBit` 15 }
-    _ -> return ()
+    _ -> instrError instr
   m' <- get
   let next_instr = IntMap.findWithDefault (Lone END) (pc m') (memory m')
   process next_instr
   return ()
+
 process (OneStr op label) = do
   m <- get
   let imm = Map.findWithDefault (error $ "label " ++ label ++ " not found") label (labels m)
   process (OneVal op (IMM16 imm))
   return ()
-process (Lone op) = do
+
+process instr@(Lone op) = do
   m <- get
   case op of
     NOP -> put $ m
-    RTI -> put $ m {psr = (psr m) `clearBit` 15, pc = Map.findWithDefault (error "R7 not initialized") R7 (regs m) }
-    _ -> return ()
+    RTI -> put $ m {psr = (psr m) `clearBit` 15, pc = Map.findWithDefault (regError R7) R7 (regs m) }
+    _ ->  instrError instr
   m' <- get
   let next_instr = IntMap.findWithDefault (Lone END) (pc m') (memory m')
   process next_instr
   return ()
-process _ = return ()
-  
+
+process instr =  instrError instr
