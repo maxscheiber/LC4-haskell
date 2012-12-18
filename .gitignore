@@ -1,2 +1,4 @@
 *.asm
 .DS_Store
+*.o
+*.hi
