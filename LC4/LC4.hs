@@ -106,7 +106,6 @@ runASM p name = do
       do let m = execState (preprocess parsed) machine
          return . Right $ execState (process $ IntMap.findWithDefault (Lone END) (pc m) 
            (memory m)) m
-         --return $ Right m
 
 preprocess :: [Line] -> State Machine ()
 preprocess []     = do
